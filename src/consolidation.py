@@ -115,7 +115,15 @@ def save_dataframe(df, path):
 if __name__ == "__main__":
     from rss_extraction import extract_all_bulletins
 
-    OUTPUT_PATH = "/Users/baptistedande/Documents/IA_DATA/TD_4/data/vulnerabilites_anssi.csv"
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    OUTPUT_PATH = os.path.join(SCRIPT_DIR, "..", "data", "vulnerabilites_anssi.csv")
+
     bulletins = extract_all_bulletins()
+
+    if os.path.exists(OUTPUT_PATH):
+        done_ids = set(pd.read_csv(OUTPUT_PATH)["id_anssi"].unique())
+        bulletins = [b for b in bulletins if b["id_anssi"] not in done_ids]
+        print(f"{len(done_ids)} bulletins déjà traités, reprise sur {len(bulletins)} restants")
+
     df = build_dataframe(bulletins, incremental_csv_path=OUTPUT_PATH)
-    print(f"Pipeline terminé : {len(df)} lignes écrites dans {OUTPUT_PATH}")
+    print(f"Pipeline terminé : {len(df)} nouvelles lignes écrites dans {OUTPUT_PATH}")
