@@ -6,8 +6,10 @@ import requests
 
 try:
     from .cache_utils import get_json_with_cache
+    from .fallback_data import read_fallback_json
 except ImportError:
     from cache_utils import get_json_with_cache
+    from fallback_data import read_fallback_json
 
 CVE_PATTERN = r"CVE-\d{4}-\d{4,7}"
 REQUEST_DELAY = 2  # secondes, rate limiting imposé par le sujet
@@ -17,9 +19,15 @@ def _bulletin_cache_key(lien_bulletin):
     return lien_bulletin.rstrip("/").split("/")[-1]
 
 
-def fetch_bulletin_json(lien_bulletin, use_cache=True, refresh_cache=False):
+def fetch_bulletin_json(
+    lien_bulletin, use_cache=True, refresh_cache=False, data_source="live", fallback_root=None
+):
     """Récupère le JSON d'un bulletin ANSSI à partir de son lien (ajout de 'json/')."""
     cache_key = _bulletin_cache_key(lien_bulletin)
+    if data_source == "fallback":
+        return read_fallback_json("anssi", cache_key, fallback_root=fallback_root)
+    if data_source != "live":
+        raise ValueError("data_source doit être 'live' ou 'fallback'")
 
     def fetch_json():
         url = lien_bulletin.rstrip("/") + "/json/"
@@ -33,14 +41,22 @@ def fetch_bulletin_json(lien_bulletin, use_cache=True, refresh_cache=False):
     )
 
 
-def extract_cves_from_bulletin(lien_bulletin, use_cache=True, refresh_cache=False):
+def extract_cves_from_bulletin(
+    lien_bulletin, use_cache=True, refresh_cache=False, data_source="live", fallback_root=None
+):
     """Retourne la liste des identifiants CVE référencés dans un bulletin.
 
     Utilise en priorité la clé 'cves' du JSON, et complète par une regex
     sur l'ensemble du document au cas où certains CVE ne seraient cités
     que dans le texte (descriptions, risques...).
     """
-    data = fetch_bulletin_json(lien_bulletin, use_cache=use_cache, refresh_cache=refresh_cache)
+    data = fetch_bulletin_json(
+        lien_bulletin,
+        use_cache=use_cache,
+        refresh_cache=refresh_cache,
+        data_source=data_source,
+        fallback_root=fallback_root,
+    )
 
     ref_cves = [c["name"] for c in data.get("cves", []) if "name" in c]
     regex_cves = re.findall(CVE_PATTERN, str(data))
