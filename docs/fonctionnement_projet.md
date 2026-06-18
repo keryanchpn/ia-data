@@ -68,7 +68,37 @@ La fonction `extract_cves_from_bulletin()` fait deux choses :
 
 Ensuite, elle fusionne les deux sources, supprime les doublons, trie la liste et retourne les identifiants CVE.
 
-## 3. Systeme de cache
+## 3. Source locale fallback
+
+Le fichier `src/fallback_data.py` permet de faire tourner le pipeline entièrement sans appels réseau, en lisant des fichiers JSON pré-téléchargés stockés dans `data_fallback/`.
+
+Structure attendue :
+
+```text
+data_fallback/
+├── data/
+│   ├── Avis/       # JSON des bulletins avis ANSSI
+│   ├── alertes/    # JSON des bulletins alertes ANSSI
+│   ├── mitre/      # réponses MITRE par CVE
+│   └── first/      # réponses FIRST EPSS par CVE
+```
+
+Les deux fonctions principales sont :
+
+- `read_fallback_json(namespace, key)` : lit un fichier JSON unique par namespace et identifiant.
+- `iter_fallback_json(namespace)` : itère sur tous les fichiers d'un namespace.
+
+Le lecteur accepte les noms de fichiers avec ou sans extension `.json`, et cherche dans plusieurs variantes de casse du dossier.
+
+Pour activer ce mode depuis la ligne de commande :
+
+```bash
+python3 src/consolidation.py --data-source fallback --fallback-root data_fallback
+```
+
+Tous les modules (`rss_extraction`, `cve_extraction`, `cve_enrichment`) acceptent le paramètre `data_source="fallback"` et délèguent alors à `fallback_data` au lieu d'appeler les API externes.
+
+## 4. Systeme de cache
 
 Le fichier `src/cache_utils.py` gere le cache local JSON.
 
@@ -111,7 +141,7 @@ Le cache est utilise pour :
 
 Le flux RSS lui-meme reste interroge directement pour detecter les bulletins disponibles.
 
-## 4. Enrichissement MITRE et EPSS
+## 5. Enrichissement MITRE et EPSS
 
 Le fichier `src/cve_enrichment.py` enrichit chaque CVE.
 
@@ -146,7 +176,7 @@ info["epss_score"] = fetch_epss_score(cve_id)
 
 Elle retourne un dictionnaire complet pour une CVE.
 
-## 5. Consolidation dans un DataFrame et CSV
+## 6. Consolidation dans un DataFrame et CSV
 
 Le fichier `src/consolidation.py` assemble tout.
 
@@ -166,6 +196,8 @@ bulletin ANSSI + CVE + produit affecte
 ```
 
 Donc si un bulletin contient plusieurs CVE, ou si une CVE touche plusieurs produits, le bulletin sera repete sur plusieurs lignes.
+
+Pour éviter de tout perdre en cas d'interruption réseau (le pipeline peut durer plusieurs dizaines de minutes), `write_consolidated_csv()` écrit d'abord dans un fichier temporaire `.vulnerabilites_anssi.csv.tmp` avec un flush ligne par ligne. Une fois le traitement terminé, ce fichier remplace le CSV final et le `.tmp` est supprimé.
 
 Les colonnes generees sont :
 
@@ -202,7 +234,7 @@ data/vulnerabilites_anssi.csv
 
 Le chemin est calcule depuis la racine du projet, donc il reste stable meme si on lance le script depuis un autre dossier.
 
-## 6. Analyse et Machine Learning
+## 7. Analyse et Machine Learning
 
 Le notebook `notebook/analyse_anssi.ipynb` charge le CSV consolide :
 
@@ -210,27 +242,30 @@ Le notebook `notebook/analyse_anssi.ipynb` charge le CSV consolide :
 df = pd.read_csv("../data/vulnerabilites_anssi.csv", parse_dates=["date_publication"])
 ```
 
+Avant les analyses, deux sous-ensembles filtrés sont construits :
+
+- `df_cvss` : lignes où `cvss_score` est renseigné (49 % du corpus — 51 % des CVE n'ont pas de score CVSS dans MITRE).
+- Les visualisations CWE et le modèle supervisé excluent les lignes où `cwe == "Non disponible"` (63,5 % du corpus) pour ne pas polluer les analyses avec une catégorie fictive.
+
 Il fait ensuite :
 
-- exploration du DataFrame ;
-- analyse des valeurs manquantes ;
+- exploration du DataFrame et analyse des valeurs manquantes ;
 - repartition des avis et alertes ;
-- distribution des scores CVSS ;
-- distribution des scores EPSS ;
-- top editeurs affectes ;
-- top produits affectes ;
-- repartition des CWE ;
-- correlation CVSS/EPSS ;
-- evolution temporelle des bulletins.
+- distribution des scores CVSS (sur `df_cvss`) ;
+- distribution des scores EPSS en double vue : échelle linéaire + échelle logarithmique (log10) pour révéler la structure near-zero de la distribution ;
+- top éditeurs et produits affectés ;
+- répartition des CWE (CWE renseignés uniquement) ;
+- corrélation CVSS/EPSS et nuage de points (sur `df_cvss`) ;
+- évolution temporelle cumulative des bulletins.
 
 La partie Machine Learning contient deux approches :
 
-- non supervise : clustering KMeans sur `cvss_score` et `epss_score` ;
-- supervise : RandomForest pour predire la severite a partir de l'EPSS et du CWE.
+- non supervisé : clustering KMeans sur `cvss_score` et `epss_score`, nombre de clusters choisi par score de silhouette ;
+- supervisé : RandomForest pour prédire la sévérité à partir de l'EPSS et du CWE (lignes avec CWE valide uniquement).
 
 Le modele non supervise cherche a regrouper les vulnerabilites selon leur profil de risque. Le modele supervise tente de predire la categorie de severite CVSS.
 
-## 7. Alertes personnalisees
+## 8. Alertes personnalisees
 
 Le fichier `src/alerting.py` sert a generer des alertes pour des abonnes.
 
@@ -244,12 +279,19 @@ Un abonne est represente comme ceci :
 }
 ```
 
+Les seuils de criticité sont définis comme constantes dans `alerting.py` :
+
+```python
+CVSS_CRITIQUE_SEUIL = 9.0
+EPSS_ALERTE_SEUIL = 0.5
+```
+
 La fonction `filter_alerts_for_subscriber()` garde les lignes qui respectent deux conditions :
 
 1. le produit est suivi par l'abonne ;
 2. la vulnerabilite est critique selon au moins un critere :
-   - `cvss_score >= 9`
-   - ou `epss_score >= 0.5`
+   - `cvss_score >= CVSS_CRITIQUE_SEUIL`
+   - ou `epss_score >= EPSS_ALERTE_SEUIL`
 
 Ensuite, `build_alert_message()` construit :
 
@@ -264,7 +306,7 @@ Ensuite, `build_alert_message()` construit :
 
 Par defaut, `send_alerts()` fonctionne en dry-run : il affiche le message sans envoyer d'email. L'envoi reel SMTP Gmail est possible avec `send=True`, mais il faut fournir un email et un mot de passe d'application.
 
-## 8. Fichiers importants
+## 9. Fichiers importants
 
 - `README.md` : explique installation, execution et structure.
 - `src/rss_extraction.py` : extraction RSS ANSSI.
@@ -272,6 +314,7 @@ Par defaut, `send_alerts()` fonctionne en dry-run : il affiche le message sans e
 - `src/cve_enrichment.py` : enrichissement MITRE et EPSS.
 - `src/consolidation.py` : pipeline principal vers CSV.
 - `src/cache_utils.py` : cache JSON local.
+- `src/fallback_data.py` : lecture des données locales hors-ligne.
 - `src/alerting.py` : alertes personnalisees.
 - `notebook/analyse_anssi.ipynb` : analyse, visualisation et ML.
 - `data/vulnerabilites_anssi.csv` : donnees consolidees.
