@@ -1,0 +1,9 @@
+feedparser
+requests
+urllib3
+pandas
+numpy
+matplotlib
+seaborn
+scikit-learn
+jupyter
