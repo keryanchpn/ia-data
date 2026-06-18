@@ -10,8 +10,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from cve_enrichment import enrich_cve
-from cve_extraction import extract_cves_from_bulletin
+try:
+    from .cve_enrichment import enrich_cve
+    from .cve_extraction import extract_cves_from_bulletin
+except ImportError:
+    from cve_enrichment import enrich_cve
+    from cve_extraction import extract_cves_from_bulletin
 
 COLUMNS = [
     "id_anssi", "titre_anssi", "type_bulletin", "date_publication",
@@ -117,12 +121,37 @@ def save_dataframe(df, path):
     print(f"DataFrame sauvegardé dans {path} ({len(df)} lignes)")
 
 
+def write_consolidated_csv(
+    bulletins, output_path, verbose=True, use_cache=True, refresh_cache=False
+):
+    """Construit le DataFrame et remplace le CSV final par une sortie propre.
+
+    Le pipeline écrit d'abord dans un fichier temporaire incrémental pour
+    conserver l'intérêt du flush ligne par ligne sans réappendre sur un ancien
+    livrable lors des relances.
+    """
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = output_path.with_name(f".{output_path.name}.tmp")
+    if tmp_path.exists():
+        tmp_path.unlink()
+
+    df = build_dataframe(
+        bulletins,
+        verbose=verbose,
+        incremental_csv_path=tmp_path,
+        use_cache=use_cache,
+        refresh_cache=refresh_cache,
+    )
+    tmp_path.replace(output_path)
+    return df
+
+
 if __name__ == "__main__":
     from rss_extraction import extract_all_bulletins
 
     PROJECT_ROOT = Path(__file__).resolve().parents[1]
     OUTPUT_PATH = PROJECT_ROOT / "data" / "vulnerabilites_anssi.csv"
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     bulletins = extract_all_bulletins()
-    df = build_dataframe(bulletins, incremental_csv_path=OUTPUT_PATH)
+    df = write_consolidated_csv(bulletins, OUTPUT_PATH)
     print(f"Pipeline terminé : {len(df)} lignes écrites dans {OUTPUT_PATH}")
