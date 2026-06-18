@@ -97,8 +97,8 @@ Une alerte est générée pour un abonné dès qu'une vulnérabilité critique
 
 ## Équipe
 
-| Nom | Prénom | Participation |
+| Prénom | Nom | Participation |
 |-----|--------|----------------|
-|     |        |                |
-|     |        |                |
-|     |        |                |
+| Baptiste | DANDÉ | 33 % |
+| Keryan | CHAMPION | 34 % |
+| Nathan | HUMEAU | 33 % |
