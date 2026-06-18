@@ -1,6 +1,6 @@
-# ia-data
+# Sup de Vinci - M1 DEV - Projet IA & Data
 
-Projet de TD Data/IA : analyse des avis et alertes ANSSI avec enrichissement des CVE.
+Projet IA & Data : analyse des avis et alertes ANSSI avec enrichissement des CVE.
 
 Pipeline d'extraction, d'enrichissement et d'analyse des avis et alertes de
 sécurité publiés par l'ANSSI (CERT-FR), avec enrichissement des CVE via les
