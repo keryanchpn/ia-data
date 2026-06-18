@@ -6,6 +6,7 @@ produits, génère donc plusieurs lignes (cf. consigne du sujet).
 """
 import csv
 import os
+from pathlib import Path
 
 import pandas as pd
 
@@ -19,7 +20,9 @@ COLUMNS = [
 ]
 
 
-def build_dataframe(bulletins, verbose=True, incremental_csv_path=None):
+def build_dataframe(
+    bulletins, verbose=True, incremental_csv_path=None, use_cache=True, refresh_cache=False
+):
     """Construit le DataFrame consolidé à partir d'une liste de bulletins
     (telle que retournée par rss_extraction.extract_all_bulletins).
 
@@ -47,7 +50,9 @@ def build_dataframe(bulletins, verbose=True, incremental_csv_path=None):
 
     for bulletin in bulletins:
         try:
-            cve_ids = extract_cves_from_bulletin(bulletin["lien"])
+            cve_ids = extract_cves_from_bulletin(
+                bulletin["lien"], use_cache=use_cache, refresh_cache=refresh_cache
+            )
         except Exception as exc:
             if verbose:
                 print(f"[WARN] Échec extraction CVE pour {bulletin['id_anssi']}: {exc}")
@@ -71,7 +76,7 @@ def build_dataframe(bulletins, verbose=True, incremental_csv_path=None):
             if verbose:
                 print(f"  -> enrichissement {cve_id}")
             try:
-                info = enrich_cve(cve_id)
+                info = enrich_cve(cve_id, use_cache=use_cache, refresh_cache=refresh_cache)
             except Exception as exc:
                 if verbose:
                     print(f"[WARN] Échec enrichissement {cve_id}: {exc}")
@@ -115,7 +120,9 @@ def save_dataframe(df, path):
 if __name__ == "__main__":
     from rss_extraction import extract_all_bulletins
 
-    OUTPUT_PATH = "/Users/baptistedande/Documents/IA_DATA/TD_4/data/vulnerabilites_anssi.csv"
+    PROJECT_ROOT = Path(__file__).resolve().parents[1]
+    OUTPUT_PATH = PROJECT_ROOT / "data" / "vulnerabilites_anssi.csv"
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     bulletins = extract_all_bulletins()
     df = build_dataframe(bulletins, incremental_csv_path=OUTPUT_PATH)
     print(f"Pipeline terminé : {len(df)} lignes écrites dans {OUTPUT_PATH}")

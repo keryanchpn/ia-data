@@ -46,6 +46,33 @@ Le sujet precise aussi que des copies locales de donnees pourront etre fournies 
 
 ## 5. Donnees a consolider
 
+- description de la vulnerabilite ;
+- score CVSS ;
+- severite CVSS ;
+- type CWE ;
+- score EPSS ;
+- editeur/vendor ;
+- produit affecte ;
+- versions affectees.
+
+Une ligne peut correspondre a une combinaison bulletin/CVE/produit/version. Un meme bulletin peut donc produire plusieurs lignes, parfois des centaines.
+
+## 6. Analyses et visualisations attendues
+
+Le notebook final doit charger le CSV consolide et produire une analyse exploitable. Les visualisations suggerees incluent :
+
+- distribution des scores CVSS ;
+- repartition des severites ;
+- repartition des types CWE ;
+- evolution temporelle du nombre de vulnerabilites ;
+- classement des editeurs et produits les plus affectes ;
+- relation entre CVSS et EPSS ;
+- heatmap de correlation ;
+- boxplots des scores par editeur ;
+- focus sur certains types CWE ou certains produits ;
+- visualisations liees aux modeles de Machine Learning.
+
+L'analyse ne doit pas seulement afficher des graphiques : elle doit formuler des constats, 
 Le fichier consolide doit contenir au minimum les champs suivants :
 
 - identifiant du bulletin ANSSI ;
