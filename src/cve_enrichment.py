@@ -8,8 +8,10 @@ from urllib3.util.retry import Retry
 
 try:
     from .cache_utils import get_json_with_cache
+    from .fallback_data import read_fallback_json
 except ImportError:
     from cache_utils import get_json_with_cache
+    from fallback_data import read_fallback_json
 
 MITRE_URL = "https://cveawg.mitre.org/api/cve/{cve_id}"
 EPSS_URL = "https://api.first.org/data/v1/epss?cve={cve_id}"
@@ -52,7 +54,7 @@ def _extract_affected(affected):
     return products
 
 
-def fetch_mitre_info(cve_id, use_cache=True, refresh_cache=False):
+def fetch_mitre_info(cve_id, use_cache=True, refresh_cache=False, data_source="live", fallback_root=None):
     """Interroge l'API MITRE pour un CVE et retourne ses informations clés."""
     def fetch_json():
         url = MITRE_URL.format(cve_id=cve_id)
@@ -62,10 +64,15 @@ def fetch_mitre_info(cve_id, use_cache=True, refresh_cache=False):
         return response.json()
 
     try:
-        data = get_json_with_cache(
-            "mitre", cve_id, fetch_json, use_cache=use_cache, refresh_cache=refresh_cache
-        )
-    except requests.RequestException:
+        if data_source == "fallback":
+            data = read_fallback_json("mitre", cve_id, fallback_root=fallback_root)
+        elif data_source == "live":
+            data = get_json_with_cache(
+                "mitre", cve_id, fetch_json, use_cache=use_cache, refresh_cache=refresh_cache
+            )
+        else:
+            raise ValueError("data_source doit être 'live' ou 'fallback'")
+    except (requests.RequestException, FileNotFoundError):
         return {
             "cve_id": cve_id, "description": "Non disponible", "cvss_score": None,
             "base_severity": "Non disponible", "cwe": "Non disponible",
@@ -101,7 +108,7 @@ def fetch_mitre_info(cve_id, use_cache=True, refresh_cache=False):
     }
 
 
-def fetch_epss_score(cve_id, use_cache=True, refresh_cache=False):
+def fetch_epss_score(cve_id, use_cache=True, refresh_cache=False, data_source="live", fallback_root=None):
     """Interroge l'API EPSS de FIRST et retourne la probabilité d'exploitation."""
     def fetch_json():
         url = EPSS_URL.format(cve_id=cve_id)
@@ -111,10 +118,15 @@ def fetch_epss_score(cve_id, use_cache=True, refresh_cache=False):
         return response.json()
 
     try:
-        response_data = get_json_with_cache(
-            "epss", cve_id, fetch_json, use_cache=use_cache, refresh_cache=refresh_cache
-        )
-    except requests.RequestException:
+        if data_source == "fallback":
+            response_data = read_fallback_json("first", cve_id, fallback_root=fallback_root)
+        elif data_source == "live":
+            response_data = get_json_with_cache(
+                "epss", cve_id, fetch_json, use_cache=use_cache, refresh_cache=refresh_cache
+            )
+        else:
+            raise ValueError("data_source doit être 'live' ou 'fallback'")
+    except (requests.RequestException, FileNotFoundError):
         return None
 
     data = response_data.get("data", [])
@@ -123,10 +135,22 @@ def fetch_epss_score(cve_id, use_cache=True, refresh_cache=False):
     return float(data[0]["epss"])
 
 
-def enrich_cve(cve_id, use_cache=True, refresh_cache=False):
+def enrich_cve(cve_id, use_cache=True, refresh_cache=False, data_source="live", fallback_root=None):
     """Combine les informations MITRE et EPSS pour un CVE donné."""
-    info = fetch_mitre_info(cve_id, use_cache=use_cache, refresh_cache=refresh_cache)
-    info["epss_score"] = fetch_epss_score(cve_id, use_cache=use_cache, refresh_cache=refresh_cache)
+    info = fetch_mitre_info(
+        cve_id,
+        use_cache=use_cache,
+        refresh_cache=refresh_cache,
+        data_source=data_source,
+        fallback_root=fallback_root,
+    )
+    info["epss_score"] = fetch_epss_score(
+        cve_id,
+        use_cache=use_cache,
+        refresh_cache=refresh_cache,
+        data_source=data_source,
+        fallback_root=fallback_root,
+    )
     return info
 
 

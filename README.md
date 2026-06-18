@@ -63,6 +63,36 @@ data/cache/
 
 Par défaut, le pipeline lit d'abord le cache si le fichier existe. Si aucune entrée n'est disponible, il interroge l'API externe, applique le délai de rate limiting, puis sauvegarde la réponse. En cas d'échec réseau, une entrée de cache existante est utilisée comme secours. Les fonctions acceptent aussi `use_cache=False` pour désactiver le cache et `refresh_cache=True` pour demander un rafraîchissement.
 
+### Source locale `data_fallback/`
+
+Pour travailler sans appels réseau, le pipeline peut lire les données locales fournies dans `data_fallback/` :
+
+```bash
+python3 src/consolidation.py --data-source fallback --fallback-root data_fallback
+```
+
+Structure attendue :
+
+```
+data_fallback/
+├── avis/      # JSON des avis ANSSI
+├── alertes/   # JSON des alertes ANSSI
+├── mitre/     # réponses MITRE par CVE
+└── first/     # réponses FIRST EPSS par CVE
+```
+
+Les fichiers peuvent être nommés `CERTFR-...` ou `CERTFR-....json` pour les bulletins, et `CVE-...` ou `CVE-....json` pour MITRE/FIRST.
+
+Le lecteur accepte aussi la structure fournie dans certains exports :
+
+```
+data_fallback/data/
+├── Avis/
+├── alertes/
+├── mitre/
+└── first/
+```
+
 ### 2. Explorer les données et lancer les modèles ML
 
 ```bash
