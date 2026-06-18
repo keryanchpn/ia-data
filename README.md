@@ -31,7 +31,7 @@ Documents produits :
 ## Installation
 
 ```bash
-pip install feedparser requests pandas matplotlib seaborn scikit-learn jupyter
+pip install -r requirements.txt
 ```
 
 ## Utilisation
