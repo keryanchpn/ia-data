@@ -4,7 +4,10 @@ import time
 
 import requests
 
-from cache_utils import get_json_with_cache
+try:
+    from .cache_utils import get_json_with_cache
+except ImportError:
+    from cache_utils import get_json_with_cache
 
 CVE_PATTERN = r"CVE-\d{4}-\d{4,7}"
 REQUEST_DELAY = 2  # secondes, rate limiting imposé par le sujet

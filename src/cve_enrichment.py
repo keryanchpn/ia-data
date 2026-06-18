@@ -6,7 +6,10 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from cache_utils import get_json_with_cache
+try:
+    from .cache_utils import get_json_with_cache
+except ImportError:
+    from cache_utils import get_json_with_cache
 
 MITRE_URL = "https://cveawg.mitre.org/api/cve/{cve_id}"
 EPSS_URL = "https://api.first.org/data/v1/epss?cve={cve_id}"
