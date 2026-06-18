@@ -69,12 +69,21 @@ def fetch_mitre_info(cve_id, use_cache=True, refresh_cache=False):
             "cwe_desc": "Non disponible", "produits": [],
         }
 
-    cna = data.get("containers", {}).get("cna", {})
+    containers = data.get("containers", {})
+    cna = containers.get("cna", {})
 
     descriptions = cna.get("descriptions", [])
     description = descriptions[0]["value"] if descriptions else "Non disponible"
 
     cvss_score, base_severity = _extract_cvss(cna.get("metrics"))
+    if cvss_score is None:
+        # Certains CNA (ex: Google/Chrome) ne renseignent pas le CVSS et le
+        # laissent à un ADP (Authorized Data Publisher, ex: CISA).
+        for adp in containers.get("adp", []):
+            cvss_score, base_severity = _extract_cvss(adp.get("metrics"))
+            if cvss_score is not None:
+                break
+
     cwe, cwe_desc = _extract_cwe(cna.get("problemTypes", []))
     produits = _extract_affected(cna.get("affected", []))
 
