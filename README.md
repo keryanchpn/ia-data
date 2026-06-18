@@ -10,6 +10,7 @@ Documents produits :
 
 - [Synthèse du projet](docs/synthese_projet.md)
 - [Cahier des charges](docs/cahier_des_charges.md)
+- [Fonctionnement détaillé du projet](docs/fonctionnement_projet.md)
 
 ## Structure du projet
 
@@ -50,6 +51,17 @@ Cela va :
 4. Consolider le tout dans un DataFrame pandas (une ligne par couple bulletin/CVE/produit) et l'exporter en CSV dans `data/vulnerabilites_anssi.csv`.
 
 **Rate limiting** : un délai de 2 secondes est respecté entre chaque requête HTTP (RSS, JSON ANSSI, API MITRE, API EPSS) pour ne pas surcharger les serveurs externes, conformément à la consigne du sujet. Le traitement complet de tous les bulletins peut donc prendre plusieurs dizaines de minutes.
+
+**Cache local** : les réponses JSON détaillées sont sauvegardées dans `data/cache/` afin d'éviter de répéter les mêmes appels réseau.
+
+```
+data/cache/
+├── anssi/   # JSON des bulletins ANSSI, indexés par identifiant CERTFR
+├── mitre/   # réponses MITRE, indexées par CVE
+└── epss/    # réponses FIRST EPSS, indexées par CVE
+```
+
+Par défaut, le pipeline lit d'abord le cache si le fichier existe. Si aucune entrée n'est disponible, il interroge l'API externe, applique le délai de rate limiting, puis sauvegarde la réponse. En cas d'échec réseau, une entrée de cache existante est utilisée comme secours. Les fonctions acceptent aussi `use_cache=False` pour désactiver le cache et `refresh_cache=True` pour demander un rafraîchissement.
 
 ### 2. Explorer les données et lancer les modèles ML
 

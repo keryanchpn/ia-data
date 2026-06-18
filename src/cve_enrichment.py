@@ -6,6 +6,8 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from cache_utils import get_json_with_cache
+
 MITRE_URL = "https://cveawg.mitre.org/api/cve/{cve_id}"
 EPSS_URL = "https://api.first.org/data/v1/epss?cve={cve_id}"
 REQUEST_DELAY = 2  # secondes, rate limiting imposé par le sujet
@@ -47,23 +49,26 @@ def _extract_affected(affected):
     return products
 
 
-def fetch_mitre_info(cve_id):
+def fetch_mitre_info(cve_id, use_cache=True, refresh_cache=False):
     """Interroge l'API MITRE pour un CVE et retourne ses informations clés."""
-    url = MITRE_URL.format(cve_id=cve_id)
-    try:
+    def fetch_json():
+        url = MITRE_URL.format(cve_id=cve_id)
         response = _session.get(url, timeout=REQUEST_TIMEOUT)
-    except requests.RequestException:
-        response = None
-    time.sleep(REQUEST_DELAY)
+        time.sleep(REQUEST_DELAY)
+        response.raise_for_status()
+        return response.json()
 
-    if response is None or response.status_code != 200:
+    try:
+        data = get_json_with_cache(
+            "mitre", cve_id, fetch_json, use_cache=use_cache, refresh_cache=refresh_cache
+        )
+    except requests.RequestException:
         return {
             "cve_id": cve_id, "description": "Non disponible", "cvss_score": None,
             "base_severity": "Non disponible", "cwe": "Non disponible",
             "cwe_desc": "Non disponible", "produits": [],
         }
 
-    data = response.json()
     cna = data.get("containers", {}).get("cna", {})
 
     descriptions = cna.get("descriptions", [])
@@ -84,28 +89,32 @@ def fetch_mitre_info(cve_id):
     }
 
 
-def fetch_epss_score(cve_id):
+def fetch_epss_score(cve_id, use_cache=True, refresh_cache=False):
     """Interroge l'API EPSS de FIRST et retourne la probabilité d'exploitation."""
-    url = EPSS_URL.format(cve_id=cve_id)
-    try:
+    def fetch_json():
+        url = EPSS_URL.format(cve_id=cve_id)
         response = _session.get(url, timeout=REQUEST_TIMEOUT)
-    except requests.RequestException:
-        response = None
-    time.sleep(REQUEST_DELAY)
+        time.sleep(REQUEST_DELAY)
+        response.raise_for_status()
+        return response.json()
 
-    if response is None or response.status_code != 200:
+    try:
+        response_data = get_json_with_cache(
+            "epss", cve_id, fetch_json, use_cache=use_cache, refresh_cache=refresh_cache
+        )
+    except requests.RequestException:
         return None
 
-    data = response.json().get("data", [])
+    data = response_data.get("data", [])
     if not data:
         return None
     return float(data[0]["epss"])
 
 
-def enrich_cve(cve_id):
+def enrich_cve(cve_id, use_cache=True, refresh_cache=False):
     """Combine les informations MITRE et EPSS pour un CVE donné."""
-    info = fetch_mitre_info(cve_id)
-    info["epss_score"] = fetch_epss_score(cve_id)
+    info = fetch_mitre_info(cve_id, use_cache=use_cache, refresh_cache=refresh_cache)
+    info["epss_score"] = fetch_epss_score(cve_id, use_cache=use_cache, refresh_cache=refresh_cache)
     return info
 
 
