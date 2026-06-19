@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Analyse ANSSI/CVE - TD Final SUPDEVINCI 2026</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/reset.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/reveal.css" />
+  <link rel="stylesheet" href="css/theme.css?v=20260619-4" />
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <!-- 0 : Contexte -->
+      <section data-slide="0">
+        <p class="eyebrow">SUPDEVINCI 2026 · Data & Cybersecurity</p>
+        <h1>Analyse des bulletins ANSSI</h1>
+        <p class="subtitle">Comment transformer une veille cyber brute en données actionnables ?</p>
+        <div class="pipeline-flow">
+          <span class="step">RSS ANSSI</span>
+          <span class="arrow">→</span>
+          <span class="step">JSON ANSSI</span>
+          <span class="arrow">→</span>
+          <span class="step">MITRE + EPSS</span>
+          <span class="arrow">→</span>
+          <span class="step">CSV</span>
+          <span class="arrow">→</span>
+          <span class="step highlight">Alertes</span>
+        </div>
+        <p class="stat">37 287 CVE · 4 103 bulletins · 720 éditeurs</p>
+      </section>
+
+      <!-- 1 : Pipeline diagram -->
+      <section data-slide="1">
+        <h2>Architecture du pipeline</h2>
+        <div class="pipeline-detail">
+          <div class="pipeline-step">
+            <div class="step-icon"><i data-lucide="rss"></i></div>
+            <div class="step-label">rss_extraction.py</div>
+            <div class="step-desc">Flux RSS avis + alertes</div>
+          </div>
+          <div class="pipeline-arrow">→</div>
+          <div class="pipeline-step">
+            <div class="step-icon"><i data-lucide="search-code"></i></div>
+            <div class="step-label">cve_extraction.py</div>
+            <div class="step-desc">JSON ANSSI + regex CVE</div>
+          </div>
+          <div class="pipeline-arrow">→</div>
+          <div class="pipeline-step">
+            <div class="step-icon"><i data-lucide="microscope"></i></div>
+            <div class="step-label">cve_enrichment.py</div>
+            <div class="step-desc">MITRE + FIRST EPSS</div>
+          </div>
+          <div class="pipeline-arrow">→</div>
+          <div class="pipeline-step">
+            <div class="step-icon"><i data-lucide="chart-no-axes-column-increasing"></i></div>
+            <div class="step-label">consolidation.py</div>
+            <div class="step-desc">CSV 284 639 lignes</div>
+          </div>
+        </div>
+        <div class="badge-row">
+          <span class="badge">cache JSON local</span>
+          <span class="badge">écriture .tmp incrémentale</span>
+          <span class="badge">mode fallback offline</span>
+        </div>
+      </section>
+
+      <!-- 2 : Choix architecture -->
+      <section data-slide="2">
+        <h2>Pourquoi ces choix ?</h2>
+        <table class="choice-table">
+          <thead><tr><th>Choix</th><th>Problème résolu</th></tr></thead>
+          <tbody>
+            <tr><td>Cache JSON par namespace</td><td>37 000+ appels API : évite les doublons et survive aux pannes</td></tr>
+            <tr><td>Écriture .tmp + flush ligne par ligne</td><td>Pipeline de plusieurs heures : aucune perte en cas de coupure réseau</td></tr>
+            <tr><td>Mode <code>--data-source fallback</code></td><td>Travailler et tester sans accès réseau</td></tr>
+            <tr><td>1 ligne = 1 (bulletin × CVE × produit)</td><td>Agrégations pandas directes, pas de jointures</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- 3 : Données manquantes -->
+      <section data-slide="3">
+        <h2>Qualité des données brutes</h2>
+        <div class="missing-grid">
+          <div class="missing-item critical">
+            <div class="missing-pct">51 %</div>
+            <div class="missing-label">cvss_score manquant</div>
+            <div class="missing-reason">Les CNA ne renseignent pas systématiquement ce champ</div>
+          </div>
+          <div class="missing-item high">
+            <div class="missing-pct">63.5 %</div>
+            <div class="missing-label">cwe = "Non disponible"</div>
+            <div class="missing-reason">MITRE ne dispose pas toujours du type de faiblesse</div>
+          </div>
+          <div class="missing-item low">
+            <div class="missing-pct">0.5 %</div>
+            <div class="missing-label">epss_score manquant</div>
+            <div class="missing-reason">CVE trop récentes non encore indexées par FIRST</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4 : Choix filtrage -->
+      <section data-slide="4">
+        <h2>Nos choix de filtrage</h2>
+        <p class="principle">On ne nettoie pas pour nettoyer : on filtre là où c'est nécessaire.</p>
+        <table class="choice-table">
+          <thead><tr><th>Problème</th><th>Choix</th><th>Pourquoi pas le filtre global ?</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>51 % CVSS manquants</td>
+              <td><code>df_cvss</code> ciblé</td>
+              <td>Filtrer globalement = perdre 51 % des données inutilement</td>
+            </tr>
+            <tr>
+              <td>CWE "Non disponible"</td>
+              <td>Exclu du ML et du camembert uniquement</td>
+              <td><code>LabelEncoder</code> l'encodait comme une CWE légitime</td>
+            </tr>
+            <tr>
+              <td>Classe NONE (11 exemples)</td>
+              <td>Exclue du modèle supervisé</td>
+              <td>Trop peu d'exemples pour être apprise</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- 5 : Répartitions filtrées -->
+      <section data-slide="5">
+        <h2>Répartitions après filtrage</h2>
+        <div class="chart-row pie-row">
+          <div class="chart-half pie-panel">
+            <canvas id="chart-severity-pie"></canvas>
+            <p class="chart-label">Sévérité CVSS, lignes avec score disponible</p>
+          </div>
+          <div class="chart-half pie-panel">
+            <canvas id="chart-cwe-pie"></canvas>
+            <p class="chart-label">Top 8 CWE renseignées, hors "Non disponible"</p>
+          </div>
+        </div>
+        <p class="insight">Ces vues montrent pourquoi les filtres sont ciblés : CVSS n'est filtré que pour les analyses CVSS, et le camembert CWE affiche uniquement les faiblesses renseignées les plus fréquentes.</p>
+      </section>
+
+      <!-- 5 : CVSS chart -->
+      <section data-slide="6">
+        <h2>Distribution des scores CVSS</h2>
+        <div class="chart-container">
+          <canvas id="chart-cvss"></canvas>
+        </div>
+        <p class="insight">Moyenne 6.9, médiane 7.5 : l'ANSSI publie quasi exclusivement sur des failles sérieuses.</p>
+      </section>
+
+      <!-- 6 : EPSS double vue -->
+      <section data-slide="7">
+        <h2>Distribution des scores EPSS</h2>
+        <div class="chart-row">
+          <div class="chart-half">
+            <canvas id="chart-epss-linear"></canvas>
+            <p class="chart-label">Échelle linéaire</p>
+          </div>
+          <div class="chart-half">
+            <canvas id="chart-epss-log"></canvas>
+            <p class="chart-label">Échelle logarithmique</p>
+          </div>
+        </div>
+        <p class="insight">Médiane 0.00048 : seulement <strong>1.09 %</strong> des CVE dépassent le seuil d'alerte EPSS ≥ 0.5.</p>
+      </section>
+
+      <!-- 7 : Top éditeurs -->
+      <section data-slide="8">
+        <h2>Top 10 des éditeurs les plus exposés</h2>
+        <div class="chart-container">
+          <canvas id="chart-vendors"></canvas>
+        </div>
+      </section>
+
+      <!-- 8 : Elbow + Silhouette -->
+      <section data-slide="9">
+        <h2>Choix du nombre de clusters : deux méthodes</h2>
+        <div class="chart-row">
+          <div class="chart-half">
+            <canvas id="chart-silhouette"></canvas>
+            <p class="chart-label">Silhouette → k=2 (0.835)</p>
+          </div>
+          <div class="chart-half">
+            <canvas id="chart-elbow"></canvas>
+            <p class="chart-label">Elbow → coude à k=3</p>
+          </div>
+        </div>
+        <p class="insight">k=2 sur-simplifie. k=3 révèle 3 profils de risque interprétables.</p>
+      </section>
+
+      <!-- 9 : KMeans scatter -->
+      <section data-slide="10">
+        <h2>3 profils de risque (KMeans k=3)</h2>
+        <div class="chart-container">
+          <canvas id="chart-kmeans"></canvas>
+        </div>
+        <div class="cluster-legend">
+          <div class="cluster-item c0"><strong>Cluster 0</strong> : CVSS 4.9 · EPSS 0.003 · Surveiller</div>
+          <div class="cluster-item c1"><strong>Cluster 1</strong> : CVSS 7.8 · EPSS 0.010 · Patcher</div>
+          <div class="cluster-item c2"><strong>Cluster 2</strong> : CVSS 8.4 · EPSS 0.754 · <strong>Urgence</strong></div>
+        </div>
+      </section>
+
+      <!-- 10 : KNN cross-val -->
+      <section data-slide="11">
+        <h2>Sélection du meilleur K : cross-validation stratifiée</h2>
+        <div class="chart-container">
+          <canvas id="chart-knn"></canvas>
+        </div>
+        <p class="insight">Meilleur K=15 (accuracy 0.611) : progression régulière, validation croisée stratifiée pour compenser le déséquilibre des classes.</p>
+      </section>
+
+      <!-- 11 : KNN résultats -->
+      <section data-slide="12">
+        <h2>Résultats KNN (K=15) : accuracy 60.5 %</h2>
+        <table class="results-table">
+          <thead><tr><th>Classe</th><th>F1-score</th><th>Interprétation</th></tr></thead>
+          <tbody>
+            <tr class="good"><td>HIGH</td><td>0.67</td><td>Bien prédit : classe majoritaire (54 %)</td></tr>
+            <tr class="good"><td>MEDIUM</td><td>0.60</td><td>Bien prédit : classe majoritaire (37 %)</td></tr>
+            <tr class="bad"><td>CRITICAL</td><td>0.17</td><td>Confondu avec HIGH : signal insuffisant</td></tr>
+            <tr class="bad"><td>LOW</td><td>0.06</td><td>Quasi invisible : absorbé par MEDIUM</td></tr>
+          </tbody>
+        </table>
+        <p class="insight">Limite : EPSS + CWE seuls ne permettent pas de discriminer les extrêmes de sévérité sans le score CVSS.</p>
+      </section>
+
+      <!-- 12 : Alertes -->
+      <section data-slide="13">
+        <h2>Du clustering aux alertes concrètes</h2>
+        <div class="alert-diagram">
+          <div class="alert-box">
+            <div class="alert-title">alerting.py</div>
+            <div class="alert-cond">CVSS ≥ 9 <span class="or">OU</span> EPSS ≥ 0.5</div>
+            <div class="alert-result">→ Mail personnalisé par produit suivi</div>
+          </div>
+          <div class="alert-link">
+            Le cluster 2 (EPSS moyen <strong>0.754</strong>) valide rétrospectivement ces seuils.
+            Le clustering ne fait pas que de l'analyse : il confirme les choix métier.
+          </div>
+        </div>
+      </section>
+
+      <!-- 13 : Conclusion -->
+      <section data-slide="14">
+        <h2>Conclusion</h2>
+        <div class="conclusion-grid">
+          <div class="conclusion-item">
+            <div class="conclusion-number">37 287</div>
+            <div class="conclusion-label">CVE traitées sur 4 103 bulletins ANSSI</div>
+          </div>
+          <div class="conclusion-item">
+            <div class="conclusion-number">k=3</div>
+            <div class="conclusion-label">clusters, dont un cluster urgence (EPSS 0.754)</div>
+          </div>
+          <div class="conclusion-item">
+            <div class="conclusion-number">60.5 %</div>
+            <div class="conclusion-label">accuracy KNN, premier filtre avant attribution CVSS officielle</div>
+          </div>
+        </div>
+        <p class="opening">Avec davantage de features (type_bulletin, éditeur, historique CVE), les modèles gagneraient significativement en précision.</p>
+      </section>
+
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@4.6.1/dist/reveal.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="js/slide-04.js"></script>
+  <script src="js/slide-05.js"></script>
+  <script src="js/slide-06.js"></script>
+  <script src="js/slide-07.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
