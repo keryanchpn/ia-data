@@ -32,6 +32,7 @@
           <span class="step highlight">Alertes</span>
         </div>
         <p class="stat">37 287 CVE · 4 103 bulletins · 720 éditeurs</p>
+        <p class="datasource">Source : dataset fallback pré-téléchargé — pipeline exécuté hors réseau</p>
       </section>
 
       <!-- 1 : Pipeline diagram -->
@@ -77,7 +78,7 @@
           <tbody>
             <tr><td>Cache JSON par namespace</td><td>37 000+ appels API : évite les doublons et survive aux pannes</td></tr>
             <tr><td>Écriture .tmp + flush ligne par ligne</td><td>Pipeline de plusieurs heures : aucune perte en cas de coupure réseau</td></tr>
-            <tr><td>Mode <code>--data-source fallback</code></td><td>Travailler et tester sans accès réseau</td></tr>
+            <tr><td>Mode <code>--data-source fallback</code></td><td>Travailler et tester sans accès réseau — <strong>source de toutes les données présentées</strong></td></tr>
             <tr><td>1 ligne = 1 (bulletin × CVE × produit)</td><td>Agrégations pandas directes, pas de jointures</td></tr>
           </tbody>
         </table>

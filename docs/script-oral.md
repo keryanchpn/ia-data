@@ -38,7 +38,7 @@ Le **cache JSON local** : avec plus de 37 000 CVE à enrichir, on ne peut pas se
 
 L'**écriture incrémentale en .tmp** : le pipeline peut durer plusieurs heures. On écrit ligne par ligne dans un fichier temporaire avec flush immédiat — si la machine plante à l'heure 3, on ne perd rien.
 
-Le **mode fallback** : pour travailler et tester sans accès réseau, on peut tout faire tourner sur des données pré-téléchargées localement.
+Le **mode fallback** : pour travailler et tester sans accès réseau, on peut tout faire tourner sur des données pré-téléchargées localement. C'est d'ailleurs ce mode qu'on a utilisé pour générer toutes les données présentées aujourd'hui — les APIs ANSSI, MITRE et FIRST ont été interrogées en amont, et les réponses stockées dans `data_fallback/`.
 
 Et le modèle de données : **1 ligne = 1 combinaison bulletin × CVE × produit**. Ça permet des agrégations pandas directes, sans jointures complexes.
 
@@ -49,6 +49,8 @@ Et le modèle de données : **1 ligne = 1 combinaison bulletin × CVE × produit
 ---
 
 **[Slide 3 — Qualité des données brutes]**
+
+Toutes les statistiques et graphiques qui suivent sont issus de ce dataset fallback — 284 000 lignes générées hors réseau, représentatives de 4 103 bulletins ANSSI.
 
 Avant d'analyser quoi que ce soit, on a fait un état des lieux de la qualité des données.
 
